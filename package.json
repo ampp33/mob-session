@@ -9,7 +9,12 @@
   },
   "dependencies": {
     "core-js": "^3.6.5",
-    "vue": "^3.0.0"
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "nano": "^10.0.0",
+    "randomstring": "^1.2.3",
+    "vue": "^3.0.0",
+    "ws": "^8.9.0"
   },
   "devDependencies": {
     "@vue/cli-plugin-babel": "~4.5.11",
