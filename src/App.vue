@@ -65,7 +65,8 @@ export default {
       turnsBetweenBrakes: 3,
       brakeDuration: 5,
       millisUntilEnd: 0,
-      lastModelUpdateTs: Date.now()
+      lastModelUpdateTs: Date.now(),
+      updatingModel: false
     }
   },
   computed: {
@@ -83,12 +84,18 @@ export default {
   },
   watch: {
     driverDuration(newDriverDuration) {
+      // skip watcher if updating model, to avoid persisting half-baked data
+      if(this.updatingModel) return;
+
       if(!this.clockRunning) {
         this.millisUntilEnd = (newDriverDuration * 60 * 1000);
       }
       this.updateModelOnServer();
     },
     turnsBetweenBrakes(newValue, oldValue) {
+      // skip watcher if updating model, to avoid persisting half-baked data
+      if(this.updatingModel) return;
+
       // subtract the number of already used turns from new value
       const turnsUsed = oldValue - this.currentTurnsUntilBrake;
       this.currentTurnsUntilBrake = newValue - turnsUsed;
@@ -98,25 +105,26 @@ export default {
       this.updateModelOnServer();
     }
   },
-  created() {
+  async created() {
     // check if mob name is specified, and if not generate one
+    let isNewMob = false;
     const url = window.location.href;
     const mobId = url.substring(url.lastIndexOf('/') + 1).trim();
     if(mobId.length == 0) {
-      window.location.href = '/' + rs.generate(8);
-      return;
+      isNewMob = true;
     }
     // keep track of mob id to pull and post mob data updates
     this.mobId = mobId;
+    await this.checkServerForModelUpdates(true);
 
     // start polling process to periodically pull mob data
-    // setInterval(() => {
-    //   this.checkServerForModelUpdates();
-    // }, 1000)
+    setInterval(() => {
+      this.checkServerForModelUpdates();
+    }, 1000)
 
     // initialize starter values
     this.currentTurnsUntilBrake = this.turnsBetweenBrakes;
-    this.reset();
+    this.millisUntilEnd = (this.driverDuration * 60 * 1000);
 
     // setup countdown process on component creation
     setInterval(() => {
@@ -130,8 +138,13 @@ export default {
       }
     }, 1000);
 
-    // write mob to server
-    this.updateModelOnServer();
+    // if this is a new mob then write it to the server
+    if(isNewMob) {
+      await this.updateModelOnServer();
+      // have page reload with mobId as part of the URL
+      window.location.href = '/' + rs.generate(8);
+      return;
+    }
   },
   methods: {
     getApiBaseUrl() {
@@ -139,9 +152,15 @@ export default {
       const url = protocol + '//' + hostname + ':' + 3000;
       return url;
     },
-    updateModelOnServer() {
+    async updateModelOnServer() {
       // update model update time
       this.lastModelUpdateTs = Date.now();
+
+      // remove updatingModel flag before persisting
+      const { updatingModel, ...data } = this.$data;
+
+      console.log('saving model to server...');
+      console.log(data);
 
       // push updates to server
       const url = this.getApiBaseUrl() + '/mob/' + this.mobId;
@@ -150,21 +169,30 @@ export default {
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(this.$data)
+        body: JSON.stringify(data)
       });
     },
-    async checkServerForModelUpdates() {
+    async checkServerForModelUpdates(force) {
       const url = this.getApiBaseUrl() + '/mob/' + this.mobId;
       const res = await fetch(url);
       const data = await res.json();
 
-      if(data.lastModelUpdateTs > this.lastModelUpdateTs) {
+      // if we get an empty object back then the mob doesn't exist, so ignore updating the model
+      if(Object.keys(data).length === 0) return;
+
+      if(force || data.lastModelUpdateTs > this.lastModelUpdateTs) {
         // if model on server was updated more recently than the last
         // update timestamp then replace the current model with the one
         // from the server
-        this.$data = data;
+        /*eslint no-unused-vars: "warn"*/
+        const { _id, _rev, ...trimmedData } = data;
+        console.log('using model from server...');
+        console.log(trimmedData);
+
+        this.updatingModel = true;
+        Object.assign(this.$data, trimmedData);
+        this.updatingModel = false;
       }
-      console.log(data);
     },
     mobNameChange(event) {
       this.mobName = event.target.innerText;
