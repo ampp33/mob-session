@@ -1,0 +1,17 @@
+- list person names (add, remove, edit)
+x set mob name
+x set driver duration
+x set turns before break
+x set brake length
+x timer that counts down
+- all syncs to a server
+
+model = {
+    members: ['bob', 'dan'],
+    mobName: "cool mob",
+    driverDuration: 15,
+    turnsBetweenBrakes: 3,
+    brakeDuration: 5,
+    driverEndTime: 1500000000
+}
+
